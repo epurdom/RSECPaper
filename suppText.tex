@@ -1,0 +1,153 @@
+We provide here detailed information regarding the implementation of the procedures described in the main text. For the most current information about implementation issues and function arguments, please consult the help pages in the Bioconductor R package \CE. The accompanying vignette provides  extended examples.
+	
+	
+\section{Infrastructure of the \CE Package}
+
+The \CE package supplies a new Bioconductor class, \f{ClusterExperiment}, for easy storage and manipulation of multiple clustering results, as well as functions for visualization of these clusterings along with the original data. The class inherits from the existing \f{SingleCellExperiment} class, a baseline class for storing single-cell and other RNA-Seq datasets in Bioconductor \cite{singlecellexperiment}. The \f{ClusterExperiment} class additionally stores how the data should be transformed and whether the input data are counts, so as to appropriately handle data from single-cell RNA-Seq and other transcriptomics experiments. The class provides a formal mechanism for storing clustering results, even when some observations are left unclustered in some of the clusterings, making comparison across clusterings based on different filtering of samples easy.
+
+The \CE package also provides a class, \f{ClusterFunction}, for storing clustering functions, so that user-defined functions can be easily integrated into the RSEC workflow.
+
+\section{clusterMany}\label{supp:clusterMany}
+
+The function \f{clusterMany} divides parameter choices into those that can be compared -- i.e., those for which the user can give multiple options and \f{clusterMany} iterates over all the combinations -- and those that are set by the user and fixed to be the same for all of the clusterings. \CE does not assume that all samples will be assigned to a cluster, depending on the clustering algorithm, and has a special encoding of ``-1'' for such lack of assignment. 
+
+The \f{clusterMany} function allows for the user to try all combinations of the following arguments, some of which are interpreted differently for different combinations of parameters: 
+
+\begin{itemize}
+\item `sequential` This parameter consists of logical values, TRUE and/or FALSE, indicating whether the sequential strategy should be implemented or not. 
+\item `subsample` This parameter consists of logical values, TRUE and/or FALSE, indicating whether the subsampling strategy for determining a dissimilarity $D$ should be implemented or not. 
+\item `clusterFunction` The clustering functions to be tried in the *main clustering step*. If `subsample=TRUE` is part of the combination, then `clusterFunction` defines the clustering method that will be used on the matrix $D$ created from subsampling the data. Otherwise, `clusterFunction` is the clustering method that will be used directly on the data. Currently the following clustering functions are implemented:
+\begin{itemize}
+	\item k-means implemented with the function \texttt{kmeans} package \texttt{stats}
+	\item PAM implemented with the function \texttt{pam} in the package \texttt{cluster}
+	\item Clara implemented with the function \texttt{clara} in package \texttt{cluster}
+	\item Spectral Clustering implemented with the function \texttt{speccin} package \texttt{kernlab}
+	\item Hierarchical clustering with $K$ clusters, implemented with the function \texttt{hclust} followed by the function \texttt{cuttree} in the package \texttt{stats}
+	\item Hierarchical clustering with clusters determined by similarity parameter $\alpha$, implemented with the function \texttt{hclust} followed by our procedure, documented below (``hierarchical01'').
+	\item Tight clustering, adapted from code in package \texttt{tight} and documented below.
+
+	\end{itemize}
+	
+\item `ks` This argument is interpreted differently for different choices of the other parameters and can therefore between different parameter combinations. If `sequential=TRUE` is part of the parameter combination, `ks` defines the argument `k0` of sequential clustering, which is approximately like the initial starting point for the number of clusters in the sequential process.  Otherwise, `ks` is passed to set `k` of both the main clustering step (and by default that of the subsampled data), and is only relevant if `clusterFunction` is of a type that requires the user to define a value $K$.
+\item `dimReduce` choices of dimensionality reduction: The choices are ``PCA",``var",``mad",``cv", and/or ``none". ``PCA" indicates clustering on the top principal components. ``var",``mad",and ``cv" indicate clustering on the top most variable features, as determined by either ``var", ``mad" or ``cv" per gene. Based on these choices the user can also set a range for the number of PCA dimensions to use or variable genes to keep.
+\item `distFunction` choices of user-defined distance functions to be used in clustering (default being euclidean), applicable when not using PCA dimensionality reduction.
+\item `minSizes` the minimum size required for a cluster -- samples in clusters smaller than this size are reclassified as ``unassigned'' (-1)
+\item `alphas` the values for $\alpha\in (0,1)$ parameters for clustering techniques that determine clusters based on the required amount of similarity rather than the number of clusters $K$. Larger values of $\alpha$ are less stringent on the amount of similarity required in a cluster (like significance levels $\alpha$ in hypothesis testing).
+\item `betas` The $\beta$ parameters used by sequential clustering to determine the level of stability required between changes in the parameters to determine that a cluster is stable and should be kept. Larger values of $\beta$ require greater stability between clusters.
+\item `findBestK` This option is for clustering techniques where the user is required to define the number of clusters $K$. Setting this options indicates that $K$ should be chosen automatically by running a range of $K$ values and choosing clustering from the $K$ that gives the largest silhouette distance between clusters.
+\item `removeSil` A logical value as to whether samples with small silhouette distance to their assigned cluster are removed, in the sense that they are not given their original cluster assignment but instead assigned as ``unassigned''. 
+  \item `silCutoff` If `removeSil` is TRUE, then `silCutoff` determines the cutoff on silhouette distance for unassign the sample from its cluster, defaulting to 0. 
+\end{itemize}
+
+
+Most of these methods and procedures are straightforward applications of general techniques. We document here only a few of the clustering methods that we have extensively adapted. 
+
+\paragraph{``hierarchical01'': Hierarchical clustering based on similarity} We provide a clustering method that we call ``hierarchical01'' (to distinguish it from using hierarchical clustering and picking $K$ clusters via \texttt{cuttree}). We run hierarchical clustering on the data, using the standard \texttt{hclust} command and an input dissimilarity matrix $D$ which is required to take on values between 0 and 1. Starting at the root of the dendrogram from hierarchical clustering, we go down the dendrogram, checking for each node $\mathcal{N}$ whether it satisfies one of two methods for determining whether the samples that are descendants from node $\mathcal{N}$ are sufficiently similar:
+\begin{enumerate}
+	\item 	all pairwise distances are $>1-\alpha$ (if method="maximum")
+	\item  all of $m_i>1-\alpha$ where $m_i$ is the mean of the pairwise distances of sample $i$ to the other samples (method=="average")
+\end{enumerate}
+The default option is ``maximum". Samples that do not satisfy this criteria for any node are not assigned to a cluster.
+
+\paragraph{``tight'': adaptation of the code of \cite{Tseng:2005ir}}
+The tight algorithm of \cite{Tseng:2005ir} included both subsampling of the data, a method for clustering of the resulting dissimilarity matrix $D$, and a procedure for repeating this process sequentially. We have modularized these steps. 
+
+The method for clustering a dissimilarity matrix $D$ that takes on values in $(0,1)$ we have modularized into a possible clustering method for the user to pick (``tight''). This method also requires not determination of the number of clusters $K$, but a level of allowed dissimilarity $\alpha$. The code is pulled from the package \texttt{tight} with minimal adaptation applied to the clustering procedure. It was written with the intention of being applied to a $D$ that was the result of subsampling. The  algorithm first finds core samples, namely those that have dissimilarity 0, and picks the largest such group (where the largest group may be of size one). It then adds samples to that core group if samples have dissimilarity with all of the core group members that is no greater than $\alpha$, and repeats this process until no remaining samples satisfy the criteria. Samples that do not satisfy this criteria are not assigned to a cluster.
+
+
+\subsection{Subsampling}\label{supp:subsampling}
+
+The subsampling option in \CE generates clusterings based on randomly sampled subsets of the full set of $n$ observations to be clustered. Each resampled dataset is clustered, leading to a collection of clusterings which are then summarized by an $n \times n$ co-clustering matrix, with entry $p_{ij}$ defined as the proportion of times the pair of samples $i$ and $j$ were in the same cluster across all of the resampled datasets. Subsampling therefore defines a dissimilarity matrix between samples, with entries $D_{ij}=1-p_{ij}$, but does not itself define a clustering of the samples.
+
+The dissimilarity matrix $D$ is next used by the RSEC workflow to cluster the samples. It is important to note that the clustering algorithm applied to $D$ does not need to be that which was used on the resampled datasets. For example, a matrix $D$ that results from partitioning each of the resampled datasets into $K$ clusters will not necessarily be amenable itself to a partition into $K$ clusters. Our experience has been that because $D$ is the result of averaging over clusterings, it is more robust to the choice of $K$ than the underlying clustering algorithm. 
+
+Furthermore, because $D$ is a dissimilarity matrix, with entries on a well-defined scale of 0-1, it is intuitive to constrain the level of between-sample dissimilarity within clusters, rather than setting a particular $K$ for the number of clusters \cite{Tseng:2005ir}. In this way, the choice of $K$ becomes instead a choice of $\alpha\in (0,1)$, defining the amount of dissimilarity allowed within a cluster. While this doesn't change the reliance on the selection of a tuning parameter, we find that specifying the dissimilarity $\alpha$ is more natural and also more robust for datasets with widely differing numbers of actual clusters to detect. The \f{clusterMany} function, of course, allows the user to easily apply multiple methods for clustering the $D$ matrix, as well as a range of corresponding parameters $\alpha$ or $K$, for comparison.
+
+Because subsampling results in two layers of clustering algorithms -- one applied to the resampled datasets and one applied to the dissimilarity matrix $D$ -- this leads to an expansion of choices that can be tried by \f{clusterMany}. For simplicity, \f{clusterMany} only allows the key parameters involved in the clustering of the matrix $D$ to be given multiple options, while the parameters for the clustering of the resampled datasets are fixed for all the comparisons that involve subsampling (though the user can set them).
+
+
+\paragraph{Memory usage in large datasets}
+
+The default implementation of subsampling and clustering $m$ times creates, $m$ symmetric matrices of size $n\times n$ of 0-1 values which indicate whether two samples are in the same clustering. These $m$ matrices are averaged to create $D$. This strategy is efficient in speed in R, but for large datasets this requires too much memory to keep this many matrices in memory. We provide an option to more reasonably store only the indices of samples grouped into clusters to reduce the memory (of size $pn$ for each subsampling, if $p$ is the proportion of samples subsampled); this creates a slow down in computation, however.
+
+\subsection{Sequential clustering} 
+
+As mentioned previously, the tight algorithm of \cite{Tseng:2005ir} included both subsampling of the data, a method for clustering of the resulting dissimilarity matrix $D$, and a procedure for repeating this process sequentially. We use the process they describe there for sequentially finding stable clusters for our sequential method. As noted above, we modularize the components of their algorithm, generalizing the sequential clustering to apply to any clustering technique, and with or without subsampling. Specifically, the ``best'' cluster is chosen to be that cluster which varies the least in its membership as the parameter controlling the number of clusters $K$ is increased, as measured in the maximal percentage overlap of clusters from clusterings from $K$ and $K+1$ (the ratio of cardinality of intersection to cardinality of union). In the case where the user does not make use of resampling, the parameter $K$ refers directly to the number of clusters for the main clustering algorithm; if instead the user chooses to make use of resampling, the parameter $K$ refers to the number of clusters for the base clustering method run on the subsampled datasets (and does not directly dictate the final number of clusters). When a cluster is found where a proportion of at least $\beta$ of its members remain in it as the parameter $K$ is increased, then the cluster is identified to be a stable cluster, the samples in it removed from further consideration, and the process begins again to find another stable cluster.
+
+In more detail, under our generalization, the sequential searching for a cluster works in one of two ways. Either it is applied to 
+\begin{enumerate}\item the results of a clustering algorithm that directly clusters the data, in which case the clustering function much be such that it requires the user to set $K$, the number of clusters \item the results of a clustering algorithm that is applied to a dissimilarity function $D$ that is the result of repeated clustering of subsampled data. In this case the clustering algorithm applied to the \emph{subsampled} data must be such that it requires the user to set $K$, but the algorithm applied to the resulting $D$ matrix is arbitrary; if the clustering matrix applied to $D$ requires the user to set $K$ to get a clustering, it is set to the $K$ used in subsampling.  \end{enumerate} 
+The sequential starts by setting the value $K=k_0$ (either at the main clustering level or the subsampled clustering level), and continues to increases $k_0$ until a cluster is found such that the similarity between the cluster with $K$ and $K-1$ is greater than or equal to $\beta$. Specifically the method looks at the top $M$ clusters in size from $K$ and $K-1$, and between each pair of two clusters of samples $i(K)$ and $j(K-1)$ that are clusters within the clusterings found with $K$ and $K-1$ clusters, respectively, the following stability measure is calculated:
+$$ \frac{|i(K)\bigcap j(K-1)|}{|i(K)\bigcup j(K-1)|}$$
+The cluster $j(K-1)$ with stability $ \geq \beta$ is chosen and if multiple such clusters are found, then the largest such cluster $j(K-1)$ is chosen by default. After finding such a cluster, the samples in this cluster are considered a cluster and removed from further consideration and $k_0$ is decreased by $1$ and the process is continued until no more clusters can satisfy this condition, or there are too few samples remaining. 
+
+
+\section{combineMany}
+
+In order to find the ensemble clustering from the results of \f{clusterMany} (or what ever set of clusterings given by the user), \f{combineMany} first converts all non-assigned samples in a clustering (internally encoded with a -1 or -2) into NA values. 
+
+If the user requires all samples to be clustered together 100\% of the time, then the \f{combineMany} simply partitions the samples based on the set of unique cluster identifications across all of the clusterings, including non-assignment to clusters (NA values).  
+
+Otherwise, \f{clusterMany} calculates the Hamming distance between samples, which is the number of positions at which the corresponding symbols in a string are different, and converts this into a percentage. This calculation is implemented by adapting the code posted by Johann de Jong \cite{hammingR} for finding hamming distance quickly in R, and adapted by us to exclude NA values in counting and in finding the proportion so that the proportion given back is the proportion of times a pair of samples do not cluster together \emph{out of the clusterings for which both samples have non-NA values}. Those samples that have no clusterings for which neither are NA are given a distance of 1. 
+
+
+
+This distance matrix $D$ is then provided to our internal clustering wrapper, which applies our ``hierarchical01" clustering described above with the method argument set to ``average'', and $\alpha$ equal to $1-p$, where $p$ is the user-given value describing the how much shared proportion they want for samples to be considered clustered together. Samples that do not meet that requirement are not given any cluster assignment. Furthermore, any samples with too large of a number of unassigned (-1) values across the samples is then unassigned from their cluster (i.e. given value ``-1''), the cutoff for which can be controlled by the user. 
+
+\section{makeDendrogram}
+For each cluster, \f{makeDendrogram} calculates the median per gene/feature within a cluster. The function then calls the R function \f{hclust} on the squared euclidean distance of the median of the clusters. The \f{makeDendrogram} function allows users to filter the genes that are used in the calculation, with the default being to use the top 500 genes based on median absolute deviation ("mad"). 
+
+Also passed to \f{hclust} is the number of samples per cluster via the argument \texttt{members} of \f{hclust}. According to the documentation of \f{hclust}, if this argument is given, the input dissimilarity matrix ``is taken to be a dissimilarity matrix between clusters instead of dissimilarities between singletons and members gives the number of observations per cluster. This way the hierarchical cluster algorithm can be ‘started in the middle of the dendrogram’, e.g., in order to reconstruct the part of the tree above a cut (see examples).''
+
+
+\section{mergeClusters}
+
+\f{mergeClusters} takes as input the dendrogram from \f{makeDendrogram} and performs for each node $\mathcal{N}$ of the dendrogram a significance test (per gene) of the difference in the mean expression between the samples that are descendants of the two daughter nodes of $\mathcal{N}$. This is done using the \texttt{limma} package, with \texttt{voom} corrections for counts if the input data is indicated to be counts. The differential expression is determined by first fitting the full model (i.e. all clusters included) and then a test of the contrast (or difference) between the average of the means of the clusters that are the descendants of one daughter nodes of $\mathcal{N}$ with the average of the means of the clusters that are the descendants of the other daughter node. Note that because the clusters are of different sizes, this is different than simply applying a t-test between the samples descendant from one daughter node against the samples descendant from the other daughter node. This reduces the dominance of large clusters. 
+
+The resulting full set of p-values are provided as input to one of several different methods for calculating the proportion of non-null hypothesis tests in a set of p-values. The available methods are 
+
+\begin{itemize}
+		\item ``Storey" refers to the method of \cite{Storey:2002p3799} where the proportion of null hypothesis is estimated as 
+		$$\frac{\text{\# pvalues }>\lambda}{(1-\lambda)(\text{\# pvalues})}$$
+and we set $\lambda=0.5$.		
+		\item ``PC" refers to the method of \cite{Pounds:2004fd} where the proportion null is estimated as twice the average p-value.
+\item ``JC" refers to the method of  \cite{Jin:2007dt}, and the implementation 
+is copied from code available on Jiashin Ji's website \cite{jcFunction} as of December 16, 2015. 
+\item ``locfdr" refers to the method of \cite{Efron:2004p3807} and uses the implementation in the package
+   \texttt{locfdr}. 
+\item ``MB" refers to the method of \cite{Meinshausen:2005gp} and uses the implementation in the package \texttt{howmany}. 
+\item ``adjP"   refers to simply calculating the proportion of genes that are found significant based on a FDR adjusted p-values (method ``BH" in \texttt{p.adjust} in R) and a cutoff of 0.05.
+
+\end{itemize}
+
+
+
+\begin{figure}
+	\begin{subfigure}{\textwidth}
+	\includegraphics[width=.65\textwidth]{plotDendrogramNodes}
+	\includegraphics[width=.3\textwidth]{NodeLegend}
+	\caption{Dendrogram with Nodes color-coded\label{fig:dendNodes}}
+	\end{subfigure}\\
+	\begin{subfigure}{\textwidth}
+	\includegraphics[width=\textwidth]{comparePropNull}
+\caption{Proportion Genes found DE\label{fig:nodePropNull}}
+	\end{subfigure}
+	\caption{(\protect\subref{fig:dendNodes}) Dendrogram of the hierarchical relationship between clusters used for \f{mergeClusters} step as well as in finding best features for each cluster. (\protect\subref{fig:nodePropNull}) shows for each node in the dendrogram the proportion of genes found differentially expressed between its children's nodes, for each method implemented in \f{mergeClusters}. 
+	\label{fig:nodeInfo}}
+\end{figure}
+
+
+\section{The \f{RSEC} Function}
+
+While the main steps of our clustering framework are implemented in separate functions available to the user, we provide a single wrapper function \f{RSEC} around these individual functions, with  parameter choices we find particularly relevant for finding robust, small, homogenous clusters that are often desirable for large or noisy gene expression studies, such as scRNA-Seq. Specifically, the clustering method used in the first step of \f{RSEC} is the tight clustering strategy of \cite{Tseng:2005ir} adapted by us for single-cell studies. This clustering method makes use of both the subsampling and sequential detection options of \f{clusterMany} that make the clustering more robust.  Furthermore, it results in small, homogeneous clusters without explicitly requiring the user to define the number of clusters $K$ \emph{a priori}; instead, its parameter require the user to define the level of similarity $\alpha$ between samples in a cluster that is desired. These parameters are more intuitive and scale better with the large numbers of samples that are seen in single-cell sequencing studies. Furthermore, our experience is that because of the underlying subsampling, variations in these parameters do not result in large changes in clusters, as compared to changing $K$ for clustering methods. During the step of RSEC that varies the parameters of this method, the resulting ensemble clustering resembles a robust combination of perturbed clusterings.
+
+\section{Data used in the Manuscript}
+\label{sec:dataProcessing}
+
+We used the single-cell RNA-Seq dataset on neuronal stem cell differentiation in the mouse olfactory epithelium (OE) from \cite{Fletcher:2017fq}. The Cufflinks estimates of the number of individual counts per gene for this data is available from GEO with accession number GSE95601. The published clustering results (to which we compared our results) were retrieved from the github directory for the \cite{Fletcher:2017fq} paper,  \url{www.github.com/rufletch/p63-HBC-diff}. 
+
+We preprocessed the read count data following the procedures of \cite{Fletcher:2017fq}, including their normalization and filtering of genes. Specifically, we normalized the data by performing PCA on quality metrics of the samples, and then regressed out from the gene expression the effects due to the first PCA of the QC metrics. We removed all undetected genes (i.e. counts of 0 in all cells), as well as removing the ERCC and the CreER gene (used for FACs sorting of the cells). We filtered cells based on QC-metric using the \f{metric\_sample\_filter} function available in the \f{scone} package. We further removed genes that did not have at least 40 counts in 5 cells. We note that \cite{Fletcher:2017fq} further removed some cells that they identified as contaminant which we did not. All of the code for running the analysis, including downloading the data, is available in the github repository for this paper: \url{www.github.com/epurdom/RSECPaper}. 
+
+
+See the methods of \cite{Fletcher:2017fq} for details on their analysis and choice of parameters for \f{RSEC}.
+
+
