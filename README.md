@@ -19,7 +19,7 @@ Note that this is quite computationally intensive, and runs on parallel cores (b
 
 ## Using the provided output (quicker)
 
-To have quicker access to the data and results, we also provide (via `git lfs`) `.rda` files that are the result of the output of downloading the data, and the `RSEC` command (see [https://git-lfs.github.com/] for instructions on `git lfs`). They are saved under the directory `dataOutput_submitted`. 
+To have quicker access to the data and results, we also provide (via `git lfs`) `.rda` files that are the result of the output of downloading the data, and the `RSEC` command (see [https://git-lfs.github.com/](https://git-lfs.github.com/) for instructions on `git lfs`). They are saved under the directory `dataOutput_submitted`. 
 
 To be able to run the above make command, and not have to rerun the computationally intensive commands, you must make the following changes:
 
