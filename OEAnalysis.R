@@ -44,7 +44,7 @@ print(get_ram())
 print(get_cpu())
 print(sessionInfo())
 
-## ---- data ----
+## ---- getData ----
 if(runClus){
 	print(Sys.time())	
 	cat("Starting processing the data:\n")
@@ -54,9 +54,6 @@ if(runClus){
 	  R.utils::gunzip(file.path(inputDataDir,"GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz"))
 	}
 	getFileFromGit("oeHBCdiff_clusterLabels.txt")
-	# if(!file.exists(file.path(inputDataDir,"oeHBCdiff_clusterLabels.txt"))) {
-# 	  download.file(urls[2], file.path(inputDataDir,"oeHBCdiff_clusterLabels.txt"))
-# 	}
 	load(file.path(inputDataDir,"GSE95601_oeHBCdiff_Cufflinks_eSet.Rda"))
 	# Count matrix
 	E <- assayData(Cufflinks_eSet)$counts_table
