@@ -12,14 +12,14 @@ You should first have R installed and the necessary packages installed: (`BiocIn
 Then type the following commands:
 
 ```
-make bioarxiv_manuscript.pdf
+make OEAnalysis.Rout
 ```
 
 Note that this is quite computationally intensive, and runs on parallel cores (by default the value defined by the environment variable `SLURM_CPUS_PER_TASK` or 6 if such a value is missing). So it should only be run from scratch in a setting appropriate to this.
 
 ## Using the provided output (quicker)
 
-To have quicker access to the data and results, we also provide (via `git lfs`) `.rda` files that are the result of the output of downloading the data, and the `RSEC` command (see [https://git-lfs.github.com/](https://git-lfs.github.com/) for instructions on `git lfs`). They are saved under the directory `dataOutput_submitted`. 
+To have quicker access to the data and results, we also provide (via `git lfs`) `.rda` files that are the result of the output of downloading the data, and the `RSEC` command (see [https://git-lfs.github.com/](https://git-lfs.github.com/) for instructions on `git lfs` and how to download these files). They are saved under the directory `dataOutput_submitted`. 
 
 To be able to run the above make command, and not have to rerun the computationally intensive commands, you must make the following changes:
 
@@ -36,7 +36,7 @@ To be able to run the above make command, and not have to rerun the computationa
 	```
 After these changes you should be able to run the above make command,
 ```
-make bioarxiv_manuscript.pdf
+make OEAnalysis.Rout
 ```
 
 With these settings, the scripts should be able to run on a laptop relatively quickly. 
