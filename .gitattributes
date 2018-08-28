@@ -1,3 +1,4 @@
 dataOutput_submitted/rsecObj.rda filter=lfs diff=lfs merge=lfs -text
 dataOutput_submitted/rsecObj2.rda filter=lfs diff=lfs merge=lfs -text
 dataOutput_submitted/rsecObj3.rda filter=lfs diff=lfs merge=lfs -text
+dataOutput_submitted/chenRSEC.rds filter=lfs diff=lfs merge=lfs -text
