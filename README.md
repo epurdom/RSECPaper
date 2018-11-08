@@ -1,4 +1,6 @@
-This is a Github repository to accompany the paper "clusterExperiment and RSEC: A Bioconductor package and framework for clustering of single-cell and other large gene expression datasets"
+This is a Github repository to accompany the paper:
+
+Risso D, Purvis L, Fletcher R, Das D, Ngai J, Dudoit S, Purdom E (2018) "clusterExperiment and RSEC: A Bioconductor package and framework for clustering of single-cell and other large gene expression datasets" PLoS Comput Biol. 2018 Sep 4;14(9):e1006378  http://dx.plos.org/10.1371/journal.pcbi.1006378
 
 # How to Reproduce the analysis
 
